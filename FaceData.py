@@ -5,7 +5,8 @@ from PIL import Image
 import torch.utils.data as data
 import numpy as np
 
-
+transform=torchvision.transforms.Compose([torchvision.transforms.ToTensor(),
+                                             torchvision.transforms.Normalize(mean=[0.5], std=[0.5])
 class Datas(data.Dataset):
     def __init__(self, path):
         self.path = path
@@ -18,7 +19,8 @@ class Datas(data.Dataset):
         strs = self.dataset[item]
         label = strs.split('.')[0][-1]
         img = Image.open(os.path.join(self.path, strs))
-        img = torch.Tensor((((np.array(img).transpose(2, 0, 1)) / 255) - 0.5) / 0.5)
+        img = transform(np.array(img).transpose(2, 0, 1))#归一化到-1-1之间                           
+        img = torch.Tensor(img)
         return img, label
 
 # d = Datas('facesdata')
