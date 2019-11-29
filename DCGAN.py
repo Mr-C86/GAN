@@ -6,7 +6,7 @@ from PIL import Image
 import numpy as np
 import torchvision
 from torchvision.utils import save_image
-
+# from torch.utils.tensorboard import SummaryWriter
 
 class D_Net(nn.Module):
     def __init__(self):
@@ -80,21 +80,31 @@ class Datas(data.Dataset):
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 dnet = D_Net().to(device)
 gnet = G_Net().to(device)
+# summaryWriter = SummaryWriter()
 datas = Datas(r'F:\faces')
 train_data = data.DataLoader(dataset=datas, batch_size=50, shuffle=True)
 loss_fun = nn.MSELoss()
-dopt = torch.optim.Adam(dnet.parameters(), betas=(0.5, 0.9))
-gopt = torch.optim.Adam(gnet.parameters(), betas=(0.5, 0.9))
+dopt = torch.optim.Adam(dnet.parameters(), lr=0.0002,betas=(0.5, 0.9))
+gopt = torch.optim.Adam(gnet.parameters(), lr=0.0002,betas=(0.5, 0.9))
 
 if __name__ == '__main__':
-    Epoch = 100
+    Epoch = 200
     SAVE_PATH = r'model/'
+    SAVE_dparams = r'model/ddcgan.pkl'
+    SAVE_gparams = r'model/gdcgan.pkl'
     SAVE_PIC = r'pic/'
+
+
     if not os.path.exists(SAVE_PATH):
         os.mkdir(SAVE_PATH)
     if not os.path.exists(SAVE_PIC):
         os.mkdir(SAVE_PIC)
-
+    if os.path.exists(SAVE_dparams):
+        dnet.load_state_dict(torch.load(SAVE_dparams))
+        print('加载Dnet模型ing。。。。')
+    if os.path.exists(SAVE_gparams):
+        dnet.load_state_dict(torch.load(SAVE_gparams))
+        print('加载Gnet模型ing。。。。')
 for epoch in range(Epoch):
     for i, x, in enumerate(train_data):
         x = x.to(device)
@@ -125,3 +135,7 @@ for epoch in range(Epoch):
             print('epoch:{} —》g_loss：{} —》d_loss：{}'.format(epoch, g_loss, d_loss))
             fake_out = fake_out.cpu().data
             save_image(fake_out, 'pic/fake_{}.jpg'.format(i), 10, 2, True, scale_each=True)
+            # summaryWriter.add_histogram(dnet.conv.weight.data,global_step=epoch)
+            # summaryWriter.add_scalar(dnet.conv.weight.data, global_step=epoch)
+    torch.save(dnet.state_dict(),SAVE_dparams)
+    torch.save(gnet.state_dict(), SAVE_gparams)
