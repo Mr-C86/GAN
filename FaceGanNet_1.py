@@ -6,33 +6,29 @@ from torchvision.utils import save_image
 from torch.utils.tensorboard import SummaryWriter
 import os
 from GAN.FaceData import Datas
-
+from GAN.ranger.ranger import Ranger
 
 class D_Net(nn.Module):
     def __init__(self):
         super().__init__()
         self.d_net = nn.Sequential(
-            nn.Conv2d(3, 512, 3, 2, 1),
+            nn.Conv2d(3, 128, 5, 3, 1, bias=False),
             # nn.BatchNorm2d(512),trick
-            nn.LeakyReLU(0.2, True),  # 48,48
+            nn.LeakyReLU(0.2, True),  # 32,32
 
-            nn.Conv2d(512, 512, 3, 2, 1),
-            nn.BatchNorm2d(512),
-            nn.LeakyReLU(0.2, True),  # 24,24
+            nn.Conv2d(128, 256, 4, 2, 1, bias=False),
+            # nn.BatchNorm2d(128),
+            nn.LeakyReLU(0.2, True),  # 16,16
 
-            nn.Conv2d(512, 256, 3, 2, 1),
-            nn.BatchNorm2d(256),
-            nn.LeakyReLU(0.2, True),  # 12,12
+            nn.Conv2d(256, 128, 4, 2, 1, bias=False),
+            # nn.BatchNorm2d(128),
+            nn.LeakyReLU(0.2, True),  # 8,8
 
-            nn.Conv2d(256, 512, 3, 2, 1),
-            nn.BatchNorm2d(512),
-            nn.LeakyReLU(0.2, True),  # 6,6
+            nn.Conv2d(128, 128, 4, 2, 1, bias=False),
+            # nn.BatchNorm2d(128),
+            nn.LeakyReLU(0.2, True),  # 4,4
 
-            nn.Conv2d(512, 256, 3, 2, 1),
-            nn.BatchNorm2d(256),
-            nn.LeakyReLU(0.2, True),  # 3,3
-
-            nn.Conv2d(256, 1, 3, 1, 0),
+            nn.Conv2d(128, 1, 4, 1, 0, bias=False),
             nn.Sigmoid(),
         )
 
@@ -47,27 +43,23 @@ class G_Net(nn.Module):
         super().__init__()
         self.g_net = nn.Sequential(
 
-            nn.ConvTranspose2d(512, 256, 3, 2, 0, 0),
-            nn.BatchNorm2d(256),
+            nn.ConvTranspose2d(128, 128, 4, 1, 0, 0, bias=False),
+            # nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
 
-            nn.ConvTranspose2d(256, 512, 3, 2, 1, 1),
-            nn.BatchNorm2d(512),
+            nn.ConvTranspose2d(128, 128, 4, 2, 1, 0, bias=False),
+            # nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
 
-            nn.ConvTranspose2d(512, 256, 3, 2, 1, 1),
-            nn.BatchNorm2d(256),
+            nn.ConvTranspose2d(128, 256, 4, 2, 1, 0, bias=False),
+            # nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
 
-            nn.ConvTranspose2d(256, 512, 3, 2, 1, 1),
-            nn.BatchNorm2d(512),
+            nn.ConvTranspose2d(256, 128, 4, 2, 1, 0, bias=False),
+            # nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
 
-            nn.ConvTranspose2d(512, 512, 3, 2, 1, 1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(inplace=True),
-
-            nn.ConvTranspose2d(512, 3, 3, 2, 1, 1),
+            nn.ConvTranspose2d(128, 3, 5, 3, 1, 0, bias=False),
             nn.Tanh()
         )
 
@@ -78,14 +70,14 @@ class G_Net(nn.Module):
 
 
 if __name__ == '__main__':
-    SAVE_PATH_D_NET = 'model/face_gan_d_net_1.pkl'
-    SAVE_PATH_G_NET = 'model/face_gan_g_net_1.pkl'
-    EPOCH = 30
+    SAVE_PATH_D_NET = 'model/face_gan_d_net_ranger.pkl'
+    SAVE_PATH_G_NET = 'model/face_gan_g_net_ranger.pkl'
+    EPOCH = 100
     BATCH_SIZE = 50
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     datas = Datas('facesdata')
-    train_data = data.DataLoader(datas, batch_size=BATCH_SIZE, shuffle=True)
+    train_data = data.DataLoader(datas, batch_size=BATCH_SIZE, shuffle=True, num_workers=4)
     loss_fn = nn.BCELoss(reduction='sum')
 
     d_net = D_Net().to(device)
@@ -98,8 +90,8 @@ if __name__ == '__main__':
         print('加载g_net--ing')
     s = SummaryWriter()
 
-    d_opt = torch.optim.Adam(d_net.parameters(), lr=0.0002, betas=(0.5, 0.999))  # betas损失的平滑程度
-    g_opt = torch.optim.Adam(g_net.parameters(), lr=0.0002, betas=(0.5, 0.999))
+    d_opt = Ranger(d_net.parameters(), lr=0.0002, betas=(0.5, 0.999),)  # betas损失的平滑程度
+    g_opt = Ranger(g_net.parameters(), lr=0.0002, betas=(0.5, 0.999))
 
     for epoch in range(EPOCH):
         for i, (x, y) in enumerate(train_data):
@@ -111,7 +103,7 @@ if __name__ == '__main__':
             real_out = d_net(x.to(device))
             d_real_loss = loss_fn(real_out, real_label)
 
-            z = torch.randn(x.size(0), 512, 1, 1).to(device)
+            z = torch.randn(x.size(0), 128, 1, 1).to(device)
             fake_img = g_net(z)
             fake_out = d_net(fake_img)
             d_fake_loss = loss_fn(fake_out, fake_label)
@@ -122,7 +114,7 @@ if __name__ == '__main__':
             d_opt.step()
 
             # 训练判别器
-            c = torch.randn(x.size(0), 512, 1, 1).to(device)
+            c = torch.randn(x.size(0), 128, 1, 1).to(device)
             fake_imgs = g_net(c)
             output = d_net(fake_imgs)
             g_loss = loss_fn(output, real_label)
@@ -135,14 +127,14 @@ if __name__ == '__main__':
                 print('epoch: {} | i/len: {}/{} | d_loss: {:.3f} | g_loss: {:.3f} | d_score: {:.3f} | g_score: {:.3f}'
                       .format(epoch, i, len(train_data), d_loss, g_loss, real_out.data.mean(), fake_out.data.mean()))
 
-        # real_img = x.reshape([-1, 3, 96, 96])
-        # fake_imgs = fake_imgs.cpu().reshape([-1, 3, 96, 96])
-        #将图片*0.5+0.5*255
-                save_image(x, 'pic/face/real_face_{}.jpg'.format(i), nrow=10, normalize=True, scale_each=True)
-                save_image(fake_imgs, 'pic/face/fake_face_{}.jpg'.format(i), nrow=10, normalize=True, scale_each=True)
+                # real_img = x.reshape([-1, 3, 96, 96])
+                # fake_imgs = fake_imgs.cpu().reshape([-1, 3, 96, 96])
+                # 将图片*0.5+0.5*255
+                save_image(x, 'pic/ranger/real_face_ranger_{}.jpg'.format(i), nrow=10, normalize=True, scale_each=True)
+                save_image(fake_imgs, 'pic/ranger/fake_face_ranger_{}.jpg'.format(i), nrow=10, normalize=True, scale_each=True)
 
-        s.add_histogram('face_d_w', d_net.d_net[0].weight.data, global_step=epoch)
-        s.add_histogram('face_g_w', g_net.g_net[0].weight.data, global_step=epoch)
-        s.add_scalars('face_loss', {'face_d_loss': d_loss, 'face_g_loss': g_loss}, global_step=epoch)
+        s.add_histogram('face_d_w_ranger', d_net.d_net[0].weight.data, global_step=epoch)
+        s.add_histogram('face_g_w_ranger', g_net.g_net[0].weight.data, global_step=epoch)
+        s.add_scalars('face_loss_ranger', {'face_d_loss': d_loss, 'face_g_loss_ranger': g_loss}, global_step=epoch)
         torch.save(d_net.state_dict(), SAVE_PATH_D_NET)
         torch.save(g_net.state_dict(), SAVE_PATH_G_NET)
